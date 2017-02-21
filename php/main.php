@@ -18,9 +18,9 @@ use Lvht\MsgpackRpc\MsgpackMessenger;
 use Lvht\MsgpackRpc\JsonMessenger;
 use Lvht\MsgpackRpc\StdIo;
 
-$log_path = getenv('HOME') . '/.phpcd.log';
+$logPath = getenv('HOME') . '/.phpcd.log';
 $logger = new Logger('PHPCD');
-$logger->pushHandler(new StreamHandler($log_path, Logger::DEBUG));
+$logger->pushHandler(new StreamHandler($logPath, Logger::DEBUG));
 if ($messenger == 'json') {
     $messenger = new JsonMessenger(new StdIo());
 } else {

@@ -33,17 +33,17 @@ class PHPID implements RpcHandler
     /**
      * update index for one class
      *
-     * @param string $class_name fqdn
+     * @param string $className fqdn
      */
-    public function update($class_name)
+    public function update($className)
     {
-        list($parent, $interfaces) = $this->getClassInfo($class_name);
+        list($parent, $interfaces) = $this->getClassInfo($className);
 
         if ($parent) {
-            $this->updateParentIndex($parent, $class_name);
+            $this->updateParentIndex($parent, $className);
         }
         foreach ($interfaces as $interface) {
-            $this->updateInterfaceIndex($interface, $class_name);
+            $this->updateInterfaceIndex($interface, $className);
         }
     }
 
@@ -52,18 +52,18 @@ class PHPID implements RpcHandler
      * or an abstract class's child class.
      *
      * @param string $name name of interface or abstract class
-     * @param bool $is_abstract_class
+     * @param bool $isAbstractClass
      *
      * @return [
      *   'full class name 1',
      *   'full class name 2',
      * ]
      */
-    public function ls($name, $is_abstract_class = false)
+    public function ls($name, $isAbstractClass = false)
     {
-        $base_path = $is_abstract_class ? $this->getIntefacesDir()
+        $basePath = $isAbstractClass ? $this->getIntefacesDir()
             : $this->getExtendsDir();
-        $path = $base_path . '/' . $this->getIndexFileName($name);
+        $path = $basePath . '/' . $this->getIndexFileName($name);
         if (!is_file($path)) {
             return [];
         }
@@ -92,8 +92,8 @@ class PHPID implements RpcHandler
         $this->class_map = require $this->root
             . '/vendor/composer/autoload_classmap.php';
 
-        $pipe_path = sys_get_temp_dir() . '/' . uniqid();
-        posix_mkfifo($pipe_path, 0600);
+        $pipePath = sys_get_temp_dir() . '/' . uniqid();
+        posix_mkfifo($pipePath, 0600);
 
         $this->vimOpenProgressBar(count($this->class_map));
 
@@ -104,13 +104,13 @@ class PHPID implements RpcHandler
                 die('could not fork');
             } elseif ($pid > 0) {
                 // 父进程
-                $pipe = fopen($pipe_path, 'r');
+                $pipe = fopen($pipePath, 'r');
                 $data = fgets($pipe);
                 $this->class_map = json_decode(trim($data), true);
                 pcntl_waitpid($pid, $status);
             } else {
                 // 子进程
-                $pipe = fopen($pipe_path, 'w');
+                $pipe = fopen($pipePath, 'w');
                 register_shutdown_function(function () use ($pipe) {
                     $data = json_encode($this->class_map, true);
                     fwrite($pipe, "$data\n");
@@ -123,7 +123,7 @@ class PHPID implements RpcHandler
             }
         }
         fclose($pipe);
-        unlink($pipe_path);
+        unlink($pipePath);
         $this->vimCloseProgressBar();
     }
 
@@ -157,43 +157,43 @@ class PHPID implements RpcHandler
 
     private function _index()
     {
-        foreach ($this->class_map as $class_name => $file_path) {
-            unset($this->class_map[$class_name]);
+        foreach ($this->class_map as $className => $file_path) {
+            unset($this->class_map[$className]);
             $this->vimUpdateProgressBar();
             require $file_path;
-            $this->update($class_name);
+            $this->update($className);
         }
     }
 
     private function updateParentIndex($parent, $child)
     {
-        $index_file = $this->getExtendsDir() . '/' . $this->getIndexFileName($parent);
-        $this->saveChild($index_file, $child);
+        $indexFile = $this->getExtendsDir() . '/' . $this->getIndexFileName($parent);
+        $this->saveChild($indexFile, $child);
     }
 
     private function updateInterfaceIndex($interface, $implementation)
     {
-        $index_file = $this->getIntefacesDir() . '/' . $this->getIndexFileName($interface);
-        $this->saveChild($index_file, $implementation);
+        $indexFile = $this->getIntefacesDir() . '/' . $this->getIndexFileName($interface);
+        $this->saveChild($indexFile, $implementation);
     }
 
-    private function saveChild($index_file, $child)
+    private function saveChild($indexFile, $child)
     {
-        $index_directory = dirname($index_file);
+        $indexDirectory = dirname($indexFile);
 
-        if (!is_dir($index_directory)) {
-            mkdir($index_directory, 0755, true);
+        if (!is_dir($indexDirectory)) {
+            mkdir($indexDirectory, 0755, true);
         }
 
-        if (is_file($index_file)) {
-            $childs = json_decode(file_get_contents($index_file));
+        if (is_file($indexFile)) {
+            $childs = json_decode(file_get_contents($indexFile));
         } else {
             $childs = [];
         }
 
         $childs[] = $child;
         $childs = array_unique($childs);
-        file_put_contents($index_file, json_encode($childs));
+        file_put_contents($indexFile, json_encode($childs));
     }
 
     private function getIndexFileName($name)

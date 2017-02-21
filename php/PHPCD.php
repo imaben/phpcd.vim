@@ -24,10 +24,11 @@ class PHPCD implements RpcHandler
 
     private $root;
 
-    public function __construct($root, Logger $logger, $match_type = self::MATCH_HEAD)
+    public function __construct($root, Logger $logger, $matchType = self::MATCH_HEAD)
     {
-        $this->logger = $logger;
-        $this->root = $root;
+        $this->logger    = $logger;
+        $this->root      = $root;
+        $this->matchType = $matchType;
     }
 
     public function setServer(RpcServer $server)
@@ -52,7 +53,7 @@ class PHPCD implements RpcHandler
     /**
      *  @param array Map between modifier numbers and displayed symbols
      */
-    private $modifier_symbols = [
+    private $modifierSymbols = [
         \ReflectionMethod::IS_FINAL      => '!',
         \ReflectionMethod::IS_PRIVATE    => '-',
         \ReflectionMethod::IS_PROTECTED  => '#',
@@ -78,22 +79,22 @@ class PHPCD implements RpcHandler
     /**
      * Fetch the completion list.
      *
-     * If both $class_name and $pattern are setted, it will list the class's
+     * If both $className and $pattern are setted, it will list the class's
      * methods, constants, and properties, filted by pattern.
      *
      * If only $pattern is setted, it will list all the defined function
      * (including the PHP's builtin function', filted by pattern.
      *
-     * @var string $class_name
+     * @var string $className
      * @var string $pattern
-     * @var string $static_mode see translateStaticMode method
-     * @var bool $public_only
+     * @var string $staticMode see translateStaticMode method
+     * @var bool $publicOnly
      */
-    public function info($class_name, $pattern, $static_mode = 'both', $public_only = true)
+    public function info($className, $pattern, $staticMode = 'both', $publicOnly = true)
     {
-        if ($class_name) {
-            $static_mode = $this->translateStaticMode($static_mode);
-            return $this->classInfo($class_name, $pattern, $static_mode, $public_only);
+        if ($className) {
+            $staticMode = $this->translateStaticMode($staticMode);
+            return $this->classInfo($className, $pattern, $staticMode, $publicOnly);
         }
 
         if ($pattern) {
@@ -107,28 +108,28 @@ class PHPCD implements RpcHandler
      * Fetch function or class method's source file path
      * and their defination line number.
      *
-     * @param string $class_name class name
-     * @param string $method_name method or function name
+     * @param string $className class name
+     * @param string $methodName method or function name
      *
      * @return [path, line]
      */
-    public function location($class_name, $method_name = null)
+    public function location($className, $methodName = null)
     {
         try {
-            if ($class_name) {
-                $reflection = new \ReflectionClass($class_name);
+            if ($className) {
+                $reflection = new \ReflectionClass($className);
 
-                if ($reflection->hasMethod($method_name)) {
-                    $reflection = $reflection->getMethod($method_name);
-                } elseif ($reflection->hasConstant($method_name)) {
-                    // 常量则返回 [ path, 'const CONST_NAME' ]
-                    return [$this->getConstPath($method_name, $reflection), 'const ' . $method_name];
-                } elseif ($reflection->hasProperty($method_name)) {
-                    list($file, $line) = $this->getPropertyDefLine($reflection, $method_name);
+                if ($reflection->hasMethod($methodName)) {
+                    $reflection = $reflection->getMethod($methodName);
+                } elseif ($reflection->hasConstant($methodName)) {
+                    // 常量则返回 [ path, 'const constName' ]
+                    return [$this->getConstPath($methodName, $reflection), 'const ' . $methodName];
+                } elseif ($reflection->hasProperty($methodName)) {
+                    list($file, $line) = $this->getPropertyDefLine($reflection, $methodName);
                     return [$file, $line];
                 }
             } else {
-                $reflection = new \ReflectionFunction($method_name);
+                $reflection = new \ReflectionFunction($methodName);
             }
 
             return [$reflection->getFileName(), $reflection->getStartLine()];
@@ -165,13 +166,13 @@ class PHPCD implements RpcHandler
         return [$file, $start];
     }
 
-    private function getConstPath($const_name, \ReflectionClass $reflection)
+    private function getConstPath($constName, \ReflectionClass $reflection)
     {
         $origin = $path = $reflection->getFileName();
-        $origin_reflection = $reflection;
+        $originReflection = $reflection;
 
         while ($reflection = $reflection->getParentClass()) {
-            if ($reflection->hasConstant($const_name)) {
+            if ($reflection->hasConstant($constName)) {
                 $path = $reflection->getFileName();
             } else {
                 break;
@@ -179,9 +180,9 @@ class PHPCD implements RpcHandler
         }
 
         if ($origin === $path) {
-            $interfaces = $origin_reflection->getInterfaces();
+            $interfaces = $originReflection->getInterfaces();
             foreach ($interfaces as $interface) {
-                if ($interface->hasConstant($const_name)) {
+                if ($interface->hasConstant($constName)) {
                     $path = $interface->getFileName();
                     break;
                 }
@@ -194,17 +195,17 @@ class PHPCD implements RpcHandler
     /**
      * Fetch function, class method or class attribute's docblock
      *
-     * @param string $class_name for function set this args to empty
+     * @param string $className for function set this args to empty
      * @param string $name
      */
-    private function doc($class_name, $name, $is_method = true)
+    private function doc($className, $name, $isMethod = true)
     {
         try {
-            if (!$class_name) {
+            if (!$className) {
                 return $this->docFunction($name);
             }
 
-            return $this->docClass($class_name, $name, $is_method);
+            return $this->docClass($className, $name, $isMethod);
         } catch (\ReflectionException $e) {
             $this->logger->debug($e->getMessage());
             return [null, null];
@@ -220,34 +221,34 @@ class PHPCD implements RpcHandler
         return [$path, $this->clearDoc($doc)];
     }
 
-    private function docClass($class_name, $name, $is_method)
+    private function docClass($className, $name, $isMethod)
     {
-        $reflection_class = new \ReflectionClass($class_name);
+        $reflectionClass = new \ReflectionClass($className);
 
-        if ($is_method) {
-            $reflection = $reflection_class->getMethod($name);
+        if ($isMethod) {
+            $reflection = $reflectionClass->getMethod($name);
         } else {
-            if ($reflection_class->hasProperty($name)) {
-                $reflection = $reflection_class->getProperty($name);
+            if ($reflectionClass->hasProperty($name)) {
+                $reflection = $reflectionClass->getProperty($name);
             } else {
-                $class_doc = $reflection_class->getDocComment();
+                $classDoc = $reflectionClass->getDocComment();
 
-                $has_pseudo_property = preg_match('/@property(|-read|-write)\s+(?<type>\S+)\s+\$?'.$name.'/mi', $class_doc, $matches);
-                if ($has_pseudo_property) {
-                    return [$reflection_class->getFileName(), '@var '.$matches['type']];
+                $hasPseudoProperty = preg_match('/@property(|-read|-write)\s+(?<type>\S+)\s+\$?'.$name.'/mi', $classDoc, $matches);
+                if ($hasPseudoProperty) {
+                    return [$reflectionClass->getFileName(), '@var '.$matches['type']];
                 }
             }
         }
 
         $doc = $reflection->getDocComment();
 
-        if ($is_method && preg_match('/@inheritDoc/', $doc)) {
-            $reflection = $this->getReflectionFromInheritDoc($reflection_class, $name);
+        if ($isMethod && preg_match('/@inheritDoc/', $doc)) {
+            $reflection = $this->getReflectionFromInheritDoc($reflectionClass, $name);
             $doc = $reflection->getDocComment();
         }
 
         if (preg_match('/@(return|var)\s+static/i', $doc)) {
-            $path = $reflection_class->getFileName();
+            $path = $reflectionClass->getFileName();
         } else {
             $path = $reflection->getDeclaringClass()->getFileName();
         }
@@ -258,33 +259,33 @@ class PHPCD implements RpcHandler
     /**
      * Get the origin method reflection the inherited docComment belongs to.
      *
-     * @param $reflection_class \ReflectionClass
+     * @param $reflectionClass \ReflectionClass
      * @param $name string
      *
      * @return \ReflectionClass
      */
-    private function getReflectionFromInheritDoc($reflection_class, $method_name)
+    private function getReflectionFromInheritDoc($reflectionClass, $methodName)
     {
-        $interfaces = $reflection_class->getInterfaces();
+        $interfaces = $reflectionClass->getInterfaces();
 
         foreach ($interfaces as $interface) {
-            if ($interface->hasMethod($method_name)) {
-                return $interface->getMethod($method_name);
+            if ($interface->hasMethod($methodName)) {
+                return $interface->getMethod($methodName);
             }
         }
 
-        $reflection_method = $reflection_class->getMethod($method_name);
-        $parent_class = $reflection_class->getParentClass();
+        $reflectionMethod = $reflectionClass->getMethod($methodName);
+        $parentClass = $reflectionClass->getParentClass();
 
-        if ($parent_class) {
-            $reflection_method = $parent_class->getMethod($method_name);
-            $doc = $reflection_method->getDocComment();
+        if ($parentClass) {
+            $reflectionMethod = $parentClass->getMethod($methodName);
+            $doc = $reflectionMethod->getDocComment();
             if (preg_match('/@inheritDoc/', $doc)) {
-                $reflection_method = $this->getInheritDoc($parent_class, $method_name);
+                $reflectionMethod = $this->getInheritDoc($parentClass, $methodName);
             }
         }
 
-        return $reflection_method;
+        return $reflectionMethod;
     }
 
     /**
@@ -301,10 +302,10 @@ class PHPCD implements RpcHandler
      */
     public function nsuse($path)
     {
-        $use_pattern =
+        $usePattern =
             '/^use\s+((?<type>(constant|function)) )?(?<left>[\\\\\w]+\\\\)?({)?(?<right>[\\\\,\w\s]+)(})?\s*;$/';
-        $alias_pattern = '/(?<suffix>[\\\\\w]+)(\s+as\s+(?<alias>\w+))?/';
-        $class_pattern = '/^\s*\b((((final|abstract)\s+)?class)|interface|trait)\s+(?<class>\S+)/i';
+        $aliasPattern = '/(?<suffix>[\\\\\w]+)(\s+as\s+(?<alias>\w+))?/';
+        $classPattern = '/^\s*\b((((final|abstract)\s+)?class)|interface|trait)\s+(?<class>\S+)/i';
 
         $s = [
             'namespace' => '',
@@ -327,7 +328,7 @@ class PHPCD implements RpcHandler
 
         $file = new \SplFileObject($path);
         foreach ($file as $line) {
-            if (preg_match($class_pattern, $line, $matches)) {
+            if (preg_match($classPattern, $line, $matches)) {
                 $s['class'] = $matches['class'];
                 break;
             }
@@ -338,26 +339,26 @@ class PHPCD implements RpcHandler
             if (preg_match('/(<\?php)?\s*namespace\s+(.*);$/', $line, $matches)) {
                 $s['namespace'] = $matches[2];
             } elseif (strtolower(substr($line, 0, 3) == 'use')) {
-                if (preg_match($use_pattern, $line, $use_matches) && !empty($use_matches)) {
-                    $expansions = array_map('self::trim', explode(',', $use_matches['right']));
+                if (preg_match($usePattern, $line, $useMatches) && !empty($useMatches)) {
+                    $expansions = array_map('self::trim', explode(',', $useMatches['right']));
 
                     foreach ($expansions as $expansion) {
-                        if (preg_match($alias_pattern, $expansion, $expansion_matches) && !empty($expansion_matches)) {
-                            $suffix = $expansion_matches['suffix'];
+                        if (preg_match($aliasPattern, $expansion, $expansionMatches) && !empty($expansionMatches)) {
+                            $suffix = $expansionMatches['suffix'];
 
-                            if (empty($expansion_matches['alias'])) {
+                            if (empty($expansionMatches['alias'])) {
                                 $suffix_parts = explode('\\', $suffix);
                                 $alias = array_pop($suffix_parts);
                             } else {
-                                $alias = $expansion_matches['alias'];
+                                $alias = $expansionMatches['alias'];
                             }
                         }
 
                         /** empty type means import of some class **/
-                        if (empty($use_matches['type'])) {
-                            $s['imports'][$alias] = $use_matches['left'] . $suffix;
+                        if (empty($useMatches['type'])) {
+                            $s['imports'][$alias] = $useMatches['left'] . $suffix;
                         }
-                        // @todo case when $use_matches['type'] is 'constant' or 'function'
+                        // @todo case when $useMatches['type'] is 'constant' or 'function'
                     }
                 }
             }
@@ -382,17 +383,17 @@ class PHPCD implements RpcHandler
      *
      * @return [type1, type2]
      */
-    public function functype($class_name, $name)
+    public function functype($className, $name)
     {
         if (version_compare(PHP_VERSION, '7.0.0') >= 0) {
-            $type = $this->typeByReturnType($class_name, $name);
+            $type = $this->typeByReturnType($className, $name);
             if ($type) {
                 return [$type];
             }
         }
 
-        list($path, $doc) = $this->doc($class_name, $name);
-        return $this->typeByDoc($path, $doc, $class_name);
+        list($path, $doc) = $this->doc($className, $name);
+        return $this->typeByDoc($path, $doc, $className);
     }
 
     /**
@@ -400,19 +401,19 @@ class PHPCD implements RpcHandler
      *
      * @return [type1, type2, ...]
      */
-    public function proptype($class_name, $name)
+    public function proptype($className, $name)
     {
-        list($path, $doc) = $this->doc($class_name, $name, false);
-        $types = $this->typeByDoc($path, $doc, $class_name);
+        list($path, $doc) = $this->doc($className, $name, false);
+        $types = $this->typeByDoc($path, $doc, $className);
 
         return $types;
     }
 
-    private function typeByReturnType($class_name, $name)
+    private function typeByReturnType($className, $name)
     {
         try {
-            if ($class_name) {
-                $reflection = new \ReflectionClass($class_name);
+            if ($className) {
+                $reflection = new \ReflectionClass($className);
                 $reflection = $reflection->getMethod($name);
             } else {
                 $reflection = new \ReflectionFunction($name);
@@ -420,7 +421,7 @@ class PHPCD implements RpcHandler
             $type = (string) $reflection->getReturnType();
 
             if (strtolower($type) == 'self') {
-                $type = $class_name;
+                $type = $className;
             }
 
             return $type;
@@ -429,10 +430,10 @@ class PHPCD implements RpcHandler
         }
     }
 
-    private function typeByDoc($path, $doc, $class_name)
+    private function typeByDoc($path, $doc, $className)
     {
-        $has_doc = preg_match('/@(return|var)\s+(\S+)/m', $doc, $matches);
-        if ($has_doc) {
+        $hasDoc = preg_match('/@(return|var)\s+(\S+)/m', $doc, $matches);
+        if ($hasDoc) {
             return $this->fixRelativeType($path, explode('|', $matches[2]));
         }
 
@@ -505,13 +506,13 @@ class PHPCD implements RpcHandler
         'void'     => 1,
     ];
 
-    private function classInfo($class_name, $pattern, $is_static, $public_only)
+    private function classInfo($className, $pattern, $isStatic, $publicOnly)
     {
         try {
-            $reflection = new \PHPCD\Reflection\ReflectionClass($class_name);
+            $reflection = new \PHPCD\Reflection\ReflectionClass($className);
             $items = [];
 
-            if (false !== $is_static) {
+            if (false !== $isStatic) {
                 foreach ($reflection->getConstants() as $name => $value) {
                     if (!$pattern || $this->matchPattern($pattern, $name)) {
                         if (is_array($value)) {
@@ -528,7 +529,7 @@ class PHPCD implements RpcHandler
                 }
             }
 
-            $methods = $reflection->getAvailableMethods($is_static, $public_only);
+            $methods = $reflection->getAvailableMethods($isStatic, $publicOnly);
 
             foreach ($methods as $method) {
                 $info = $this->getMethodInfo($method, $pattern);
@@ -537,7 +538,7 @@ class PHPCD implements RpcHandler
                 }
             }
 
-            $properties = $reflection->getAvailableProperties($is_static, $public_only);
+            $properties = $reflection->getAvailableProperties($isStatic, $publicOnly);
 
             foreach ($properties as $property) {
                 $info = $this->getPropertyInfo($property, $pattern);
@@ -546,9 +547,9 @@ class PHPCD implements RpcHandler
                 }
             }
 
-            $pseudo_items = $this->getPseudoProperties($reflection);
+            $pseudoItems = $this->getPseudoProperties($reflection);
 
-            $items = array_merge($items, $pseudo_items);
+            $items = array_merge($items, $pseudoItems);
 
             return $items;
         } catch (\ReflectionException $e) {
@@ -560,8 +561,8 @@ class PHPCD implements RpcHandler
     public function getPseudoProperties(\ReflectionClass $reflection)
     {
         $doc = $reflection->getDocComment();
-        $has_doc = preg_match_all('/@property(|-read|-write)\s+(?<types>\S+)\s+\$?(?<names>[a-zA-Z0-9_$]+)/mi', $doc, $matches);
-        if (!$has_doc) {
+        $hasDoc = preg_match_all('/@property(|-read|-write)\s+(?<types>\S+)\s+\$?(?<names>[a-zA-Z0-9_$]+)/mi', $doc, $matches);
+        if (!$hasDoc) {
             return [];
         }
 
@@ -691,14 +692,14 @@ class PHPCD implements RpcHandler
         }
 
         switch ($this->matchType) {
-            case self::MATCH_SUBSEQUENCE:
-                // @TODO Case sensitivity of matching should be probably configurable
-                $modifiers = 'i';
-                $regex = sprintf('/%s/%s', implode('.*', array_map('preg_quote', str_split($pattern))), $modifiers);
+        case self::MATCH_SUBSEQUENCE:
+            // @TODO Case sensitivity of matching should be probably configurable
+            $modifiers = 'i';
+            $regex = sprintf('/%s/%s', implode('.*', array_map('preg_quote', str_split($pattern))), $modifiers);
 
-                return (bool)preg_match($regex, $fullString);
-            default:
-                return stripos($fullString, $pattern) === 0;
+            return (bool)preg_match($regex, $fullString);
+        default:
+            return stripos($fullString, $pattern) === 0;
         }
     }
 
@@ -708,7 +709,7 @@ class PHPCD implements RpcHandler
      */
     private function getModifierSymbols()
     {
-        return $this->modifier_symbols;
+        return $this->modifierSymbols;
     }
 
     private function getModifiers($reflection)
@@ -740,13 +741,13 @@ class PHPCD implements RpcHandler
     {
         $dir = dirname($path);
 
-        $composer_path = $this->root . '/composer.json';
+        $composerPath = $this->root . '/composer.json';
 
-        if (!is_readable($composer_path)) {
+        if (!is_readable($composerPath)) {
             return [];
         }
 
-        $composer = json_decode(file_get_contents($composer_path), true);
+        $composer = json_decode(file_get_contents($composerPath), true);
 
         if (isset($composer['autoload']['psr-4'])) {
             $list = (array) $composer['autoload']['psr-4'];
@@ -755,12 +756,12 @@ class PHPCD implements RpcHandler
         }
 
         if (isset($composer['autoload-dev']['psr-4'])) {
-            $dev_list = (array) $composer['autoload-dev']['psr-4'];
+            $devList = (array) $composer['autoload-dev']['psr-4'];
         } else {
-            $dev_list = [];
+            $devList = [];
         }
 
-        foreach ($dev_list as $namespace => $paths) {
+        foreach ($devList as $namespace => $paths) {
             if (isset($list[$namespace])) {
                 $list[$namespace] = array_merge((array)$list[$namespace], (array) $paths);
             } else {
@@ -773,13 +774,13 @@ class PHPCD implements RpcHandler
             foreach ((array)$paths as $path) {
                 $path = realpath($this->root.'/'.$path);
                 if (strpos($dir, $path) === 0) {
-                    $sub_path = str_replace($path, '', $dir);
-                    $sub_path = str_replace('/', '\\', $sub_path);
-                    $sub_namespace = trim($sub_path, '\\');
-                    if ($sub_namespace) {
-                        $sub_namespace = '\\' . $sub_namespace;
+                    $subPath = str_replace($path, '', $dir);
+                    $subPath = str_replace('/', '\\', $subPath);
+                    $subNamespace = trim($subPath, '\\');
+                    if ($subNamespace) {
+                        $subNamespace = '\\' . $subNamespace;
                     }
-                    $namespaces[] = trim($namespace, '\\').$sub_namespace;
+                    $namespaces[] = trim($namespace, '\\').$subNamespace;
                 }
             }
         }
