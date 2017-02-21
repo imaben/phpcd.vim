@@ -124,8 +124,8 @@ class PHPCD implements RpcHandler
                     // 常量则返回 [ path, 'const CONST_NAME' ]
                     return [$this->getConstPath($method_name, $reflection), 'const ' . $method_name];
                 } elseif ($reflection->hasProperty($method_name)) {
-                    $line = $this->getPropertyDefLine($reflection, $method_name);
-                    return [$reflection->getFileName(), $line];
+                    list($file, $line) = $this->getPropertyDefLine($reflection, $method_name);
+                    return [$file, $line];
                 }
             } else {
                 $reflection = new \ReflectionFunction($method_name);
@@ -139,16 +139,30 @@ class PHPCD implements RpcHandler
 
     private function getPropertyDefLine($classReflection, $property)
     {
-        $class = new \SplFileObject($classReflection->getFileName());
-        $class->seek($classReflection->getStartLine());
+        $find = function($classReflection, $property) {
+            $class = new \SplFileObject($classReflection->getFileName());
+            $class->seek($classReflection->getStartLine());
 
-        $pattern = '/(private|protected|public|var)\s\$' . $property . '/x';
-        foreach ($class as $line => $content) {
-            if (preg_match($pattern, $content)) {
-                return $line + 1;
+            $pattern = '/(private|protected|public|var)\s\$' . $property . '/x';
+            foreach ($class as $line => $content) {
+                if (preg_match($pattern, $content)) {
+                    return $line + 1;
+                }
             }
-        }
-        return $classReflection->getStartLine();
+            return false;
+        };
+
+        $start = $classReflection->getStartLine();
+        $file = $classReflection->getFileName();
+
+        do {
+            if (false !== ($line = $find($classReflection, $property))) {
+                return [$classReflection->getFileName(), $line];
+            }
+            $classReflection = $classReflection->getParentClass();
+        } while ($classReflection && ($line === false));
+
+        return [$file, $start];
     }
 
     private function getConstPath($const_name, \ReflectionClass $reflection)
